@@ -52,10 +52,15 @@ def update_timeseries(
     if out_nc_path is None:
         out_nc_path = nora_nc_path
 
-    # Load existing NORA3 series (assumed to use 'date' as the time coordinate)
-    nora_ds = xr.open_dataset(nora_nc_path)
-    nora_ds = nora_ds.load()   # read data into memory
-    nora_ds.close()            # release file handle / lock
+    # Load existing NORA3 series if present (assumed to use 'date' as the time coordinate)
+    nora_ds = None
+    try:
+        nora_ds = xr.open_dataset(nora_nc_path)
+        nora_ds = nora_ds.load()   # read data into memory
+        nora_ds.close()            # release file handle / lock
+    except FileNotFoundError:
+        if verbose:
+            print(f"Base file not found at {nora_nc_path}; starting from MEPS only.")
 
     # Load and prep weights grid (as DataArray on y/x)
     w_grid = _load_weights(weights_csv_path)
@@ -88,8 +93,11 @@ def update_timeseries(
             meps_ds = meps_ds.reset_coords(c, drop=True)
 
 
-    # Append to NORA series
-    out = xr.concat([nora_ds, meps_ds], dim="date", combine_attrs="override")
+    # Append to NORA series (or start from MEPS if no base file)
+    if nora_ds is None:
+        out = meps_ds
+    else:
+        out = xr.concat([nora_ds, meps_ds], dim="date", combine_attrs="override")
     out = out.sortby("date")
     # Drop duplicate timestamps (keep first)
     out = out.sel(date=~out.indexes["date"].duplicated())
@@ -97,6 +105,8 @@ def update_timeseries(
     out = out.reindex(date=hourly_index)
     
     # --- WRITE VIA TEMP FILE, THEN REPLACE ---
+    # ensure directory exists
+    _ensure_dir(os.path.dirname(out_nc_path))
     tmp_path = out_nc_path + ".tmp"
     out.to_netcdf(tmp_path, mode="w")   # ensure write mode
     os.replace(tmp_path, out_nc_path)   # atomic move
@@ -260,4 +270,3 @@ if __name__ == "__main__":
         leadtimes=leadtimes,
         verbose=not args.quiet,
     )
-

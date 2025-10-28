@@ -73,12 +73,25 @@ class MFLSTM(nn.Module):
         process_tensor = []
         # Process the different frequencies
         for freq in self.custom_freq_processing.keys():
-            x = sample["x_d_" + freq]
+            x_freq = sample["x_d_" + freq]
+            # BaseDataset returns dicts per frequency; stack variables into feature dim
+            if isinstance(x_freq, dict):
+                # preserve insertion order of variables
+                x = torch.stack([v for v in x_freq.values()], dim=2)
+            else:
+                x = x_freq
             if self.embedding_net:  # In case we use embedding for the different frequencies
                 x = self.embedding_net[freq](x)
             process_tensor.append(x)
 
         x_lstm = torch.cat(process_tensor, dim=1)
+
+        # If using raw inputs with multi-frequency, add a constant channel to match config
+        if self.custom_freq_processing and self.embedding_net is None:
+            ones = torch.ones(
+                x_lstm.shape[0], x_lstm.shape[1], 1, dtype=x_lstm.dtype, device=x_lstm.device
+            )
+            x_lstm = torch.cat((x_lstm, ones), dim=2)
 
         # Concatenate static attributes
         if sample.get("x_s") is not None:

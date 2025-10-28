@@ -151,20 +151,27 @@ def create_folder(folder_path: str):
 
 
 def upload_to_device(sample: dict, device: str):
-    """Upload the different tensors, contained in a dictionary, to the device.
+    """Recursively move tensors in a (possibly nested) sample dict to device.
 
-    Parameters
-    ----------
-    sample : dict
-        Dictionary with the different tensors that will be used for the forward pass.
-    device: str
-        cpu, gpu
-
+    Skips metadata like 'basin' and 'date'. Safely handles nested dicts
+    produced by BaseDataset.collate_fn for keys like 'x_d_1D', 'x_d_1h'.
     """
-    for key in sample.keys():
-        if key not in ("basin", "date"):
-            sample[key] = sample[key].to(device)
-    return sample
+    import torch
+
+    def _to_device(x):
+        if isinstance(x, dict):
+            return {k: _to_device(v) for k, v in x.items()}
+        if torch.is_tensor(x):
+            return x.to(device)
+        return x
+
+    out = {}
+    for key, val in sample.items():
+        if key in ("basin", "date"):
+            out[key] = val
+        else:
+            out[key] = _to_device(val)
+    return out
 
 
 def set_random_seed(seed: int = None):

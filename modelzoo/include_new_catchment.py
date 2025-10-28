@@ -13,14 +13,14 @@ from pdf_csv import make_df
 from weights_coords import compute_coords_weights
 from add_meps import update_timeseries
 
-basin_id = 'Holmen'
+basin_id = 'ytre_alsaaker'#'Holmen'
 
 #read files from NEVINA
-pdf_path = f'/home/ubuntu/myproject/inflow_forecast/pdfs/Nedbørfeltparam-{basin_id}.pdf'
-shp_path = f'/home/ubuntu/myproject/inflow_forecast/shps/{basin_id}/NedbfeltF_v3.shp'
+pdf_path = f'pdfs/Nedbørfeltparam-{basin_id}.pdf'
+shp_path = f'shps/{basin_id}/NedbfeltF_v4.shp'#holmen v3
 
 #path to attributes file (all plants/catchments)
-attr = pd.read_csv('/home/ubuntu/myproject/inflow_forecast/Data/attributes/attributes.csv')
+attr = pd.read_csv('Data/attributes/attributes.csv')
 attr = attr[attr['basin_id'] != basin_id.lower()]
 
 
@@ -53,14 +53,14 @@ df = df[keep]
 
 updated_attr = pd.concat([df, attr], ignore_index=True) 
 updated_attr = updated_attr.drop('Unnamed: 0', axis=1, errors='ignore')
-updated_attr.to_csv('/home/ubuntu/myproject/inflow_forecast/Data/attributes/attributes.csv', index=False)
+updated_attr.to_csv('Data/attributes/attributes.csv', index=False)
 
 print('Attributes updated')
 
 
 #GET COORDINATES AND WEIGHTS FOR METEOROLOGICAL FORCINGS
 df2 = compute_coords_weights(shapefile_path=shp_path)
-df2.to_csv(f'/home/ubuntu/myproject/inflow_forecast/coords_weights/{basin_id}_coords_weights.csv', index=False)
+df2.to_csv(f'coords_weights/{basin_id}_coords_weights.csv', index=False)
 
 print('Coordinates and weights saved')
 
@@ -70,9 +70,9 @@ print('Coordinates and weights saved')
 
 #UPDATE HISTORICAL DYNAMIC INPUT WITH MEPS DATA
 update_timeseries(
-    nora_nc_path=f"/home/ubuntu/myproject/inflow_forecast/Data/time_series/{basin_id.lower()}.nc",
-    weights_csv_path=f"/home/ubuntu/myproject/inflow_forecast/coords_weights/{basin_id}_coords_weights.csv",
-    out_nc_path=f"/home/ubuntu/myproject/inflow_forecast/Data/time_series/{basin_id.lower()}.nc",  # overwrite
+    nora_nc_path=f"Data/time_series/{basin_id.lower()}.nc",
+    weights_csv_path=f"coords_weights/{basin_id}_coords_weights.csv",
+    out_nc_path=f"Data/time_series/{basin_id.lower()}.nc",  # overwrite
     start_date="2024-10-01",
     #end_date=None -> yesterday
 )
