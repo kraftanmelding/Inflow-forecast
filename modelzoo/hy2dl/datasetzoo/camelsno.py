@@ -150,8 +150,13 @@ class CAMELS_NO(BaseDataset):
         nc_path = Path(self.path_data) / "time_series" / f"{catch_id}.nc"
         ds = xr.open_dataset(nc_path)
         df = ds.to_dataframe().reset_index().set_index("date")
-        df.rename(columns={"streamflow": "QObs(mm/h)"}, inplace=True)
-        df["QObs(mm/h)"] = df["QObs(mm/h)"].apply(lambda x: np.nan if x < 0 else x)
+        if "streamflow" in df.columns:
+            df.rename(columns={"streamflow": "QObs(mm/h)"}, inplace=True)
+        if "QObs(mm/h)" not in df.columns:
+            # Catchments without observations default to NaNs so inference can proceed.
+            df["QObs(mm/h)"] = np.nan
+        else:
+            df["QObs(mm/h)"] = df["QObs(mm/h)"].apply(lambda x: np.nan if x < 0 else x)
         return df
     
 
