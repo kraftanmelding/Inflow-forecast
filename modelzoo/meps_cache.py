@@ -60,6 +60,24 @@ def fetch_meps_dataset(
     ds_remote = xr.open_dataset(url)
     ds_remote.load()
 
+    # Clip to 4.7 <= lon <= 31.1 and 57.98 <= lat <= 71.165 (W & N Norway)
+    lon_min, lon_max = 4.7, 31.1
+    lat_min, lat_max = 57.98, 71.165
+    if {"longitude", "latitude"}.issubset(ds_remote.coords):
+        ds_remote = ds_remote.sel(
+            latitude=slice(lat_min, lat_max),
+            longitude=slice(lon_min, lon_max),
+        )
+    else:
+        lon2d, lat2d = xr.broadcast(ds_remote["x"], ds_remote["y"])
+        mask = (
+            (lat2d >= lat_min)
+            & (lat2d <= lat_max)
+            & (lon2d >= lon_min)
+            & (lon2d <= lon_max)
+        )
+        ds_remote = ds_remote.isel(y=mask.any(axis=1), x=mask.any(axis=0))
+
     if cache_dir:
         local_path.parent.mkdir(parents=True, exist_ok=True)
         ds_remote.to_netcdf(local_path)
@@ -108,4 +126,3 @@ def prefetch_meps_range(
                 except Exception as err:
                     if verbose:
                         print(f"Failed to fetch {init_dt:%Y-%m-%d %H} +{lt:02d}h: {err}")
-
