@@ -14,3 +14,7 @@ __pycache__/
 # Package cache directories
 modelzoo/__pycache__/
 modelzoo/hy2dl/**/__pycache__/
+
+# Only of local interest
+Data/attributes/attributes_bck.csv
+Data/attributes/questions.txt
