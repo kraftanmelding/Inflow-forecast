@@ -1,11 +1,14 @@
 # meps_timeseries.py
 import os
 from datetime import datetime, timedelta
-from typing import Iterable, Optional, Sequence
+from pathlib import Path
+from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+from .meps_cache import fetch_meps_dataset
 
 
 # --- Public API ----------------------------------------------------------------
@@ -18,6 +21,7 @@ def update_timeseries(
     end_date: Optional[str] = None,
     init_hours: Sequence[int] = (0, 3, 6, 9, 12, 15, 18, 21),
     leadtimes: Sequence[int] = (0, 1, 2),
+    cache_dir: str,
     verbose: bool = True,
 ) -> xr.Dataset:
     """
@@ -41,6 +45,9 @@ def update_timeseries(
         Forecast initialization hours (UTC) to pull.
     leadtimes : sequence of int
         Lead times (hours) relative to each initialization.
+    cache_dir : str
+        Directory where raw MEPS NetCDF files should be cached. This must be provided
+        so downloads are reused across basins and subsequent runs.
     verbose : bool
         Print progress.
 
@@ -49,8 +56,14 @@ def update_timeseries(
     xr.Dataset
         The merged NORA+MEPS dataset on the 'date' dimension.
     """
+    if not cache_dir:
+        raise ValueError("cache_dir must be provided.")
+
     if out_nc_path is None:
         out_nc_path = nora_nc_path
+
+    # Normalize cache directory
+    cache_path = Path(cache_dir)
 
     # Load existing NORA3 series if present (assumed to use 'date' as the time coordinate)
     nora_ds = None
@@ -78,6 +91,7 @@ def update_timeseries(
         end_date=end_dt,
         init_hours=init_hours,
         leadtimes=leadtimes,
+        cache_dir=cache_path,
         verbose=verbose,
     )
 
@@ -123,6 +137,7 @@ def fetch_meps_weighted_timeseries(
     end_date: pd.Timestamp,
     init_hours: Iterable[int] = (0, 3, 6, 9, 12, 15, 18, 21),
     leadtimes: Iterable[int] = (0, 1, 2),
+    cache_dir: Path,
     verbose: bool = True,
 ) -> xr.Dataset:
     meps_vars = [
@@ -146,23 +161,23 @@ def fetch_meps_weighted_timeseries(
             init_dt = pd.Timestamp(datetime(date.year, date.month, date.day, ih))
             for lt in leadtimes:
                 valid_dt = init_dt + pd.Timedelta(hours=lt)
-                url = (
-                    "https://thredds.met.no/thredds/dodsC/"
-                    f"meps25epsarchive/{init_dt:%Y}/{init_dt:%m}/{init_dt:%d}/"
-                    f"{init_dt:%H}/member_00/meps_sfc_{lt:02d}_{init_dt:%Y%m%dT%H}Z.nc"
-                )
-                if verbose:
-                    print(f"Processing {valid_dt:%Y-%m-%d %H:%M}  ({url})")
-
                 try:
-                    ds = xr.open_dataset(url)
+                    ds, source = fetch_meps_dataset(
+                        init_dt=init_dt,
+                        leadtime=lt,
+                        cache_dir=cache_dir,
+                        verbose=verbose,
+                    )
+                    if verbose:
+                        print(f"Processing {valid_dt:%Y-%m-%d %H:%M}  ({source})")
                 except Exception as e:
                     if verbose:
-                        print(f"  -> skip (open failed): {e}")
+                        print(f"  -> skip (fetch failed): {e}")
                     continue
 
                 vars_here = [v for v in meps_vars if v in ds.variables]
                 if not vars_here:
+                    ds.close()
                     continue
 
                 weights = (
@@ -254,6 +269,7 @@ if __name__ == "__main__":
     parser.add_argument("--end", default=None, help="End date (YYYY-MM-DD). Defaults to yesterday.")
     parser.add_argument("--init-hours", default="0,3, 6,9,12,15,18,21", help="Comma-separated init hours.")
     parser.add_argument("--leadtimes", default="0,1,2", help="Comma-separated lead times (hours).")
+    parser.add_argument("--cache-dir", required=True, help="Directory to cache raw MEPS NetCDF files.")
     parser.add_argument("--quiet", action="store_true", help="Suppress progress prints.")
 
     args = parser.parse_args()
@@ -268,5 +284,6 @@ if __name__ == "__main__":
         end_date=args.end,
         init_hours=init_hours,
         leadtimes=leadtimes,
+        cache_dir=args.cache_dir,
         verbose=not args.quiet,
     )
