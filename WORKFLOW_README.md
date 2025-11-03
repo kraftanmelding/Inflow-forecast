@@ -12,7 +12,8 @@ python download_meps.py   --start 2025-10-27   --end 2025-10-29   --init-hours 0
 
 - Adjust `--start/--end` to control the date range (inclusive).
 - `--init-hours` (UTC) and `--leadtimes` (hours) should match what your forecast jobs will need.
-- Use cron/systemd to automate this every 3 or 24 hours as desired.
+- Use cron/systemd to automate this every 3 or 24 hours as desired ()see below
+
 
 ## 2. Onboard a New Basin
 
@@ -32,7 +33,17 @@ With the cache primed and the basin onboarded, run the forecast pipeline:
 python run_forecast.py   --basin ytre_alsaaker   --data-path Data   --model-path inflow_model/model   --scaler-path inflow_model/scaler.pickle   --forecast-dir forecasts   --meps-cache Data/meps_cache
 ```
 
-The job will update forcings for today, evaluate the MFLSTM, and write a CSV like `forecasts/<date>_ytre_alsaaker.csv` containing observed/predicted discharge in mm/h and cumecs.
+The job will update forcings(=features for non-metereoligists) for today, evaluate the MFLSTM, and write a CSV like `forecasts/<date>_ytre_alsaaker.csv` containing observed/predicted discharge in mm/h and cumecs.
+
+
+## Set up CRON
+```
+# Run every 3 hours to keep MEPS cache warm
+# (edit paths/hours/lead times to match your environment)
+0 */3 * * * /usr/bin/env bash -lc 'cd /home/USER/path/to/Inflow-forecast && python download_meps.py --start $(date +\%Y-\%m-\%d --date="-1 day") --end $(date +\%Y-\%m-\%d) --init-hours 0,6,12,18 --leadtimes 0,1,2,3,4,5,6 --cache-dir Data/meps_cache >> logs/meps_prefetch.log 2>&1'
+```
+
+Every 3 hours, go into `/home/USER/path/to/Inflow-forecast`, run `download_meps.py` for yesterday through today’s forecasts, and append the output to `logs/meps_prefetch.log`.
 
 > **Tips**
 > - Ensure the cache exists (`mkdir -p Data/meps_cache`) before first use.
