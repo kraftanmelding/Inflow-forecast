@@ -58,7 +58,7 @@ def _extract_static_attributes(pdf_path: Path, basin_id: str) -> pd.DataFrame:
     return df[KEEP_COLUMNS]
 
 
-def process_catchment(basin_id: str):
+def process_catchment(basin_id: str, meps_cache_dir: Path = Path("Data/meps_cache")):
     start = time.time()
 
     basin_id = basin_id.strip()
@@ -89,6 +89,7 @@ def process_catchment(basin_id: str):
         weights_csv_path=str(coords_path),
         out_nc_path=str(ts_path),
         start_date="2024-10-01",
+        cache_dir=meps_cache_dir,
     )
 
     end = time.time()
@@ -98,8 +99,9 @@ def process_catchment(basin_id: str):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Add a new catchment to the inflow pipeline.")
     parser.add_argument("--basin", default="ytre_alsaaker", help="Catchment/basin identifier (matches filenames).")
+    parser.add_argument("--meps-cache", default="Data/meps_cache", help="Directory to cache raw MEPS NetCDF files.")
     args = parser.parse_args(argv)
-    process_catchment(args.basin)
+    process_catchment(args.basin, Path(args.meps_cache))
 
 
 if __name__ == "__main__":

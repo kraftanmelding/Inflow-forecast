@@ -60,6 +60,7 @@ def run_forecast(
     model_path: Path = Path("inflow_model/model"),
     scaler_path: Path = Path("inflow_model/scaler.pickle"),
     forecast_dir: Path = Path("forecasts"),
+    meps_cache_dir: Path = Path("Data/meps_cache"),
 ):
     start = time.time()
 
@@ -67,6 +68,7 @@ def run_forecast(
     basin_lower = basin_id.lower()
     data_path = Path(data_path)
     forecast_dir = Path(forecast_dir)
+    meps_cache_dir = Path(meps_cache_dir)
 
     today = date.today()
     fcast_end = today + timedelta(days=2)
@@ -89,6 +91,7 @@ def run_forecast(
         end_date=today,
         init_hours=[0],
         leadtimes=list(range(0, 6)),
+        cache_dir=meps_cache_dir,
     )
 
     try:
@@ -100,6 +103,7 @@ def run_forecast(
             end_date=today,
             init_hours=[6],
             leadtimes=list(range(0, 67)),
+            cache_dir=meps_cache_dir,
         )
     except Exception as e:
         print(f"init_hours=[6] failed: {e} -> trying [3]")
@@ -111,6 +115,7 @@ def run_forecast(
             end_date=today,
             init_hours=[3],
             leadtimes=list(range(6, 67)),
+            cache_dir=meps_cache_dir,
         )
 
     # Fill NaNs conservatively using mean over available history
@@ -214,6 +219,7 @@ def main(argv=None):
     parser.add_argument("--model-path", default="inflow_model/model", help="Path to trained model weights.")
     parser.add_argument("--scaler-path", default="inflow_model/scaler.pickle", help="Path to scaler pickle.")
     parser.add_argument("--forecast-dir", default="forecasts", help="Directory to write forecast CSV.")
+    parser.add_argument("--meps-cache", default="Data/meps_cache", help="Directory to cache raw MEPS NetCDF files.")
     args = parser.parse_args(argv)
     run_forecast(
         basin_id=args.basin,
@@ -221,6 +227,7 @@ def main(argv=None):
         model_path=Path(args.model_path),
         scaler_path=Path(args.scaler_path),
         forecast_dir=Path(args.forecast_dir),
+        meps_cache_dir=Path(args.meps_cache),
     )
 
 
