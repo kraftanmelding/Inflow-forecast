@@ -7,6 +7,7 @@ import pandas as pd
 import xarray as xr
 
 from hy2dl.datasetzoo.basedataset import BaseDataset
+from hy2dl.utils.config import Config
 
 
 class CAMELS_NO(BaseDataset):
@@ -104,24 +105,45 @@ class CAMELS_NO(BaseDataset):
         dynamic_embedding: Optional[bool] = False,
         unique_prediction_blocks: Optional[bool] = False,
     ):
-        # Run the __init__ method of BaseDataset class, where the data is processed
+        """Adapter to the installed hy2dl BaseDataset API using Config.
+
+        Builds a Config from the provided arguments and initializes BaseDataset
+        with `time_period='testing'` while setting `testing_period=time_period`.
+        """
+        # store paths needed by readers before BaseDataset kicks in
+        self.path_data = path_data
         self.forcing = forcing
-        super(CAMELS_NO, self).__init__(
-            dynamic_input=dynamic_input,
-            target=target,
-            sequence_length=sequence_length,
-            time_period=time_period,
-            path_data=path_data,
-            path_entities=path_entities,
-            entity=entity,
+
+        # Build Config compatible with installed hy2dl
+        cfg_dict = {
+            "dynamic_input": dynamic_input,
+            "static_input": static_input or [],
+            "target": target,
+            # sequence handling
+            "seq_length_hindcast": sequence_length,
+            "seq_length_forecast": 0,
+            "custom_seq_processing": custom_freq_processing,
+            # prediction window
+            "predict_last_n": predict_last_n,
+            "unique_prediction_blocks": bool(unique_prediction_blocks),
+            # embeddings flag is required when using grouped inputs
+            "dynamic_embedding": dynamic_embedding,
+            # forecast inputs not used in this dataset
+            "forecast_input": [],
+            # periods
+            "testing_period": time_period,
+            # additional features
+            "path_additional_features": path_additional_features or None,
+        }
+
+        cfg = Config(cfg_dict, dev_mode=True)
+
+        # Initialize BaseDataset; use 'testing' to consume testing_period
+        super().__init__(
+            cfg=cfg,
+            time_period="testing",
             check_NaN=check_NaN,
-            path_additional_features=path_additional_features,
-            predict_last_n=predict_last_n,
-            static_input=static_input,
-            conceptual_input=conceptual_input,
-            custom_freq_processing=custom_freq_processing,
-            dynamic_embedding=dynamic_embedding,
-            unique_prediction_blocks=unique_prediction_blocks,
+            entities_ids=entity,
         )
 
     def _read_data(self, catch_id: str) -> pd.DataFrame:
@@ -137,6 +159,6 @@ class CAMELS_NO(BaseDataset):
         attr_path = Path(self.path_data) / "attributes" / "attributes.csv"
         df = pd.read_csv(attr_path).set_index("basin_id")
         df = df.loc[self.entities_ids]
-        df = df[self.static_input]  # filter to only static_input variables
+        # filter to only static_input variables from config
+        df = df[self.cfg.static_input]
         return df
-
