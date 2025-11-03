@@ -5,6 +5,7 @@ from typing import Iterable, Optional, Tuple
 
 import pandas as pd
 import xarray as xr
+import numpy as np
 
 
 MEPS_URL_TEMPLATE = (
@@ -12,6 +13,19 @@ MEPS_URL_TEMPLATE = (
     "meps25epsarchive/{:%Y}/{:%m}/{:%d}/{:%H}/member_00/"
     "meps_sfc_{:02d}_{:%Y%m%dT%H}Z.nc"
 )
+
+MEPS_REQUIRED_VARS = [
+    "air_pressure_at_sea_level",
+    "air_temperature_2m",
+    "precipitation_amount_acc",
+    "relative_humidity_2m",
+    "surface_downwelling_longwave_flux_in_air",
+    "surface_downwelling_shortwave_flux_in_air",
+    "wind_direction",
+    "wind_speed",
+    "low_type_cloud_area_fraction",
+    "medium_type_cloud_area_fraction",
+]
 
 
 def _local_path(cache_dir: Path, init_dt: pd.Timestamp, leadtime: int) -> Path:
@@ -63,24 +77,35 @@ def fetch_meps_dataset(
     # Clip to 4.7 <= lon <= 31.1 and 57.98 <= lat <= 71.165 (W & N Norway)
     lon_min, lon_max = 4.7, 31.1
     lat_min, lat_max = 57.98, 71.165
-    if {"longitude", "latitude"}.issubset(ds_remote.coords):
-        ds_remote = ds_remote.sel(
-            latitude=slice(lat_min, lat_max),
-            longitude=slice(lon_min, lon_max),
-        )
+    
+    mask = (
+        (ds_remote.longitude >= lon_min)
+        & (ds_remote.longitude <= lon_max)
+        & (ds_remote.latitude >= lat_min)
+        & (ds_remote.latitude <= lat_max)
+    )
+    if not mask.any():
+        raise RuntimeError("Bounding box mask produced no points; check coordinates.")
+    
+    yy, xx = np.where(mask)
+    y_slice = slice(int(yy.min()), int(yy.max()) + 1)
+    x_slice = slice(int(xx.min()), int(xx.max()) + 1)
+
+    ds_remote = ds_remote.isel(y=y_slice, x=x_slice)
+
+    keep_vars = [v for v in MEPS_REQUIRED_VARS if v in ds_remote.data_vars]
+    keep_vars += [v for v in ("longitude", "latitude") if v in ds_remote.data_vars]
+    keep_vars = list(dict.fromkeys(keep_vars))
+    if keep_vars:
+        ds_remote = ds_remote[keep_vars]
     else:
-        lon2d, lat2d = xr.broadcast(ds_remote["x"], ds_remote["y"])
-        mask = (
-            (lat2d >= lat_min)
-            & (lat2d <= lat_max)
-            & (lon2d >= lon_min)
-            & (lon2d <= lon_max)
-        )
-        ds_remote = ds_remote.isel(y=mask.any(axis=1), x=mask.any(axis=0))
+        raise RuntimeError("No required MEPS variables found in downloaded dataset.")
 
     if cache_dir:
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        ds_remote.to_netcdf(local_path)
+        encoding = {name: {"dtype": "float32", "zlib": True, "complevel": 4}
+                    for name in ds_remote.data_vars}
+        ds_remote.to_netcdf(local_path, encoding=encoding)
         ds_remote.close()
         if verbose:
             print(f"Saved MEPS cache: {local_path}")
